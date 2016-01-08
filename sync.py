@@ -1,18 +1,63 @@
-__author__ = 'stewartpolley'
-
-import sys
-import polib
+#!/usr/bin/env python2
 import getopt
-from transifex.api import TransifexAPI
-import shutil
 import os
+import polib
+import requests
+import shutil
+import sys
+from transifex.api import TransifexAPI, TransifexAPIException
+
+
+class Transifex(TransifexAPI):
+    """
+    The TransifexAPI is great, only need to overwrite method
+    """
+    def get_translation(self, project_slug, resource_slug, language_code,
+                        path_to_pofile):
+        """
+        Returns the requested translation, if it exists. The translation is
+        returned as a serialized string, unless the GET parameter file is
+        specified.
+
+        @param project_slug
+            The project slug
+        @param resource_slug
+            The resource slug
+        @param language_code
+            The language_code of the file.
+            This should be the *Transifex* language code
+        @param path_to_pofile
+            The path to the pofile which will be saved
+
+        @return None
+
+        @raises `TransifexAPIException`
+        @raises `IOError`
+        """
+        url = '%s/project/%s/resource/%s/translation/%s/?onlyreviewed' % (
+            self._base_api_url, project_slug, resource_slug, language_code
+        )
+        output_path = path_to_pofile
+        query = {
+            'file': ''
+        }
+        response = requests.get(url, auth=self._auth, params=query)
+        if response.status_code != requests.codes['OK']:
+            raise TransifexAPIException(response)
+        else:
+            handle = open(output_path, 'w')
+            for line in response.iter_content():
+                handle.write(line)
+            handle.close()
+
 
 class AuthenticationError(Exception):
     pass
 
+
 def main(username, password, project_slug, resource_slug, path, exclude, keep):
     print "Initialising"
-    trans = TransifexAPI(username, password, "http://transifex.com")
+    trans = Transifex(username, password, "http://transifex.com")
     print "Testing connection"
     if not trans.ping():
         raise AuthenticationError("Whoops, please check the username/password")
@@ -26,7 +71,6 @@ def main(username, password, project_slug, resource_slug, path, exclude, keep):
                 print("{} will be ignored".format(language))
             except ValueError:
                 print "{} not a valid language".format(language)
-
 
     directory = os.path.dirname("{}/po/".format(path))
     if not os.path.exists(directory):
@@ -45,7 +89,7 @@ def main(username, password, project_slug, resource_slug, path, exclude, keep):
 
     print "All languages downloaded and converted"
     if not keep:
-        print "Deleting /PO file"
+        print "Deleting /PO files"
         shutil.rmtree("{}/po/".format(path))
     else:
         print "Keeping PO Files in {}/po/".format(path)
@@ -53,16 +97,14 @@ def main(username, password, project_slug, resource_slug, path, exclude, keep):
     return
 
 if __name__ == "__main__":
-    project_slug = ""
-    resource_slug = ""
     save_path = "language_files"
     exclude = []
     try:
         opts, args = getopt.getopt(sys.argv[1:], "", ["project=", "resource=", "path=", "exclude=", "keep="])
     except getopt.GetoptError:
         print getopt.GetoptError
-        print("""Usage:python sync.py --project=project_slug --resource=resource_slug [--path=<dir>, --exclude=lang_code, --keep=True]\n
-        E.G. python sync.py user pass --project=my_app --resource=core --path=/usr/bin/language_files/ --exclude=en_AU""")
+        print "Usage:python sync.py --project=project_slug --resource=resource_slug [--path=<dir> --exclude=lang_code --keep=True]"
+        print "E.G. python sync.py --project=my_app --resource=core --path=/usr/bin/language_files/ --exclude=en_AU"
         sys.exit(2)
 
     keep = False
@@ -84,24 +126,23 @@ if __name__ == "__main__":
     try:
         with open("auth.txt", "r") as f: auth=f.readlines()
     except IOError:
-        auth =[]
+        auth = []
         auth.append(raw_input("Please enter your Transifex username: "))
         auth.append(raw_input("Please enter your Transifex password: "))
         auth[0] += "\n"
         with open("auth.txt", "w+") as f: f.writelines(auth)
-        
 
-    if project_slug == "":
-    	raw_input("Please specify your project using --project=project_slug")
-    	sys.exit(2)
-    	
-    if resource_slug == "":
-    	raw_input("Please specify your resource using --resource=resource_slug")
-    	sys.exit(2)
+    if not project_slug:
+        print("Please specify your project using --project=project_slug")
+        sys.exit(2)
+
+    if not resource_slug:
+        print("Please specify your resource using --resource=resource_slug")
+        sys.exit(2)
 
     main(auth[0].strip(),
          auth[1],
-         project_slug, 
+         project_slug,
          resource_slug,
          save_path,
          exclude,

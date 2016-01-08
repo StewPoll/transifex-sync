@@ -1,1 +1,3 @@
 requests
+polib
+python-transifex
