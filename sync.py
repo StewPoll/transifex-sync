@@ -1,4 +1,5 @@
 #!/usr/bin/env python2
+import codecs
 import getopt
 import os
 import polib
@@ -7,6 +8,13 @@ import shutil
 import sys
 from transifex.api import TransifexAPI, TransifexAPIException
 
+
+def base_encode(string):
+    return codecs.encode(string.encode(), "base-64").decode()
+
+
+def base_decode(string):
+    return codecs.decode(string.encode(), "base-64").decode()
 
 class Transifex(TransifexAPI):
     """
@@ -124,13 +132,15 @@ if __name__ == "__main__":
             keep = arg
 
     try:
-        with open("auth.txt", "r") as f: auth=f.readlines()
+        with open("auth.txt", "r") as f:
+            auth=f.readlines()
+            username = base_decode(auth[0])
+            password = base_decode(auth[1])
     except IOError:
-        auth = []
-        auth.append(raw_input("Please enter your Transifex username: "))
-        auth.append(raw_input("Please enter your Transifex password: "))
-        auth[0] += "\n"
-        with open("auth.txt", "w+") as f: f.writelines(auth)
+        username = raw_input("Please enter your Transifex username: ")
+        password = raw_input("Please enter your Transifex password: ")
+        with open("auth.txt", "w+") as f:
+            f.writelines([base_encode(username), base_encode(password)])
 
     if not project_slug:
         print("Please specify your project using --project=project_slug")
@@ -140,8 +150,8 @@ if __name__ == "__main__":
         print("Please specify your resource using --resource=resource_slug")
         sys.exit(2)
 
-    main(auth[0].strip(),
-         auth[1],
+    main(username,
+         password,
          project_slug,
          resource_slug,
          save_path,
